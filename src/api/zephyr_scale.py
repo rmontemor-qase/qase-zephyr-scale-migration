@@ -1,0 +1,291 @@
+import http.client
+import time
+
+import requests
+
+from ..exceptions.api import APIError
+
+_DEFAULT_BASE_URL = "https://api.zephyrscale.smartbear.com/v2"
+
+
+class ZephyrScaleApiClient:
+    """HTTP client for the Zephyr Scale Cloud REST API.
+
+    Base URL: ``https://api.zephyrscale.smartbear.com/v2``
+    Auth: ``Authorization: Bearer <jwt-token>``
+    Pagination: ``startAt`` + ``maxResults`` (max 1000 per page).
+    """
+
+    def __init__(
+        self,
+        token: str,
+        logger,
+        base_url: str = _DEFAULT_BASE_URL,
+        max_retries: int = 7,
+        backoff_factor: float = 2.0,
+        connect_timeout: float = 30.0,
+        read_timeout: float = 60.0,
+        page_size: int = 100,
+    ):
+        self.base_url = (base_url or _DEFAULT_BASE_URL).rstrip("/")
+        self.logger = logger
+        self.headers = {
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+        }
+        self.max_retries = max_retries
+        self.backoff_factor = backoff_factor
+        self.request_timeout = (float(connect_timeout), float(read_timeout))
+        self.page_size = int(page_size)
+
+    # ------------------------------------------------------------------
+    # Low-level request helpers
+    # ------------------------------------------------------------------
+
+    def _get(self, path: str, params: dict = None) -> dict:
+        """GET ``{base_url}/{path}`` and return the parsed JSON body."""
+        url = f"{self.base_url}/{path.lstrip('/')}"
+        for attempt in range(self.max_retries + 1):
+            try:
+                response = requests.get(
+                    url,
+                    headers=self.headers,
+                    params=params or {},
+                    timeout=self.request_timeout,
+                )
+                if response.status_code == 200:
+                    try:
+                        return response.json()
+                    except (ValueError, requests.exceptions.JSONDecodeError) as e:
+                        raise APIError(f"Non-JSON response from {path!r}") from e
+                # Fast-fail on deterministic client errors (any 4xx except 408/429)
+                if 400 <= response.status_code < 500 and response.status_code not in (408, 429):
+                    raise APIError(
+                        f"HTTP {response.status_code} (non-retryable) for {path!r}"
+                    )
+                time.sleep(self.backoff_factor * (2 ** attempt))
+            except APIError:
+                raise
+            except (
+                requests.exceptions.Timeout,
+                http.client.RemoteDisconnected,
+                ConnectionResetError,
+                requests.exceptions.ConnectionError,
+            ):
+                time.sleep(self.backoff_factor * (2 ** attempt))
+
+            if attempt == self.max_retries:
+                raise APIError(f"Max retries reached for {path!r}")
+
+    def _get_paginated(self, path: str, params: dict = None):
+        """Yield all pages from a Zephyr Scale paginated endpoint.
+
+        Zephyr Scale uses ``startAt`` / ``maxResults`` / ``isLast`` for pagination.
+        Returns each page's ``values`` list as one batch.
+        """
+        start_at = 0
+        base_params = dict(params or {})
+        base_params["maxResults"] = self.page_size
+        while True:
+            base_params["startAt"] = start_at
+            data = self._get(path, base_params)
+            values = data.get("values") or []
+            if values:
+                yield values
+            if data.get("isLast", True) or len(values) < self.page_size:
+                break
+            start_at += len(values)
+
+    # ------------------------------------------------------------------
+    # Projects
+    # ------------------------------------------------------------------
+
+    def get_projects(self):
+        """Return all Zephyr Scale–enabled projects."""
+        all_projects = []
+        for page in self._get_paginated("projects", {"maxResults": 50}):
+            all_projects.extend(page)
+        return all_projects
+
+    # ------------------------------------------------------------------
+    # Folders
+    # ------------------------------------------------------------------
+
+    def get_folders(self, project_key: str, folder_type: str = "TEST_CASE"):
+        """Return all folders of *folder_type* for *project_key*.
+
+        folder_type: ``TEST_CASE``, ``TEST_CYCLE``, or ``TEST_PLAN``
+        """
+        all_folders = []
+        for page in self._get_paginated(
+            "folders", {"projectKey": project_key, "folderType": folder_type}
+        ):
+            all_folders.extend(page)
+        return all_folders
+
+    # ------------------------------------------------------------------
+    # Test cases
+    # ------------------------------------------------------------------
+
+    def get_test_cases(self, project_key: str, folder_id: int = None):
+        """Yield pages of test cases for *project_key*, optionally filtered by *folder_id*."""
+        params = {"projectKey": project_key}
+        if folder_id is not None:
+            params["folderId"] = folder_id
+        yield from self._get_paginated("testcases", params)
+
+    def get_test_case(self, test_case_key: str) -> dict:
+        """Fetch a single test case with its full detail."""
+        return self._get(f"testcases/{test_case_key}")
+
+    def get_test_steps(self, test_case_key: str) -> list:
+        """Return test steps for a test case (step-by-step type)."""
+        data = self._get(f"testcases/{test_case_key}/teststeps")
+        return data.get("values") or []
+
+    # ------------------------------------------------------------------
+    # Test cycles
+    # ------------------------------------------------------------------
+
+    def get_test_cycles(self, project_key: str, created_after: int = 0):
+        """Yield pages of test cycles for *project_key*."""
+        params = {"projectKey": project_key}
+        for page in self._get_paginated("testcycles", params):
+            if created_after:
+                page = [
+                    c for c in page
+                    if (c.get("createdOn") or 0) >= created_after
+                ]
+            if page:
+                yield page
+
+    def get_test_cycle(self, cycle_key: str) -> dict:
+        """Fetch a single test cycle."""
+        return self._get(f"testcycles/{cycle_key}")
+
+    # ------------------------------------------------------------------
+    # Test executions
+    # ------------------------------------------------------------------
+
+    def get_test_executions(self, project_key: str, test_cycle_key: str = None):
+        """Yield pages of test executions, optionally filtered by cycle key."""
+        params = {"projectKey": project_key}
+        if test_cycle_key:
+            params["testCycle"] = test_cycle_key
+        yield from self._get_paginated("testexecutions", params)
+
+    # ------------------------------------------------------------------
+    # Statuses and priorities
+    # ------------------------------------------------------------------
+
+    def get_priorities(self, project_key: str) -> list:
+        data = self._get("priorities", {"projectKey": project_key, "maxResults": 100})
+        return data.get("values") or []
+
+    def get_statuses(self, project_key: str, status_type: str = "TEST_CASE") -> list:
+        data = self._get(
+            "statuses",
+            {"projectKey": project_key, "statusType": status_type, "maxResults": 100},
+        )
+        return data.get("values") or []
+
+    # ------------------------------------------------------------------
+    # Attachments
+    # ------------------------------------------------------------------
+
+    def _get_optional(self, path: str, params: dict = None):
+        """Like _get but returns None on 404 instead of raising."""
+        url = f"{self.base_url}/{path.lstrip('/')}"
+        try:
+            response = requests.get(
+                url,
+                headers=self.headers,
+                params=params or {},
+                timeout=self.request_timeout,
+            )
+            if response.status_code == 200:
+                return response.json()
+            if response.status_code == 404:
+                return None
+            if 400 <= response.status_code < 500 and response.status_code not in (408, 429):
+                return None
+            return None
+        except Exception:
+            return None
+
+    def get_test_case_attachments(self, tc_key: str) -> list:
+        """Return attachment metadata for a test case (empty list if none or 404)."""
+        data = self._get_optional(f"testcases/{tc_key}/attachments")
+        if data is None:
+            return []
+        return data.get("values") or []
+
+    def get_test_execution_attachments(self, ex_id) -> list:
+        """Return attachment metadata for a test execution (empty list if none or 404)."""
+        data = self._get_optional(f"testexecutions/{ex_id}/attachments")
+        if data is None:
+            return []
+        return data.get("values") or []
+
+    def download_attachment_bytes(
+        self,
+        url: str,
+        jira_email: str = None,
+        jira_api_token: str = None,
+        cdn_cookie: str = None,
+    ) -> bytes:
+        """Download attachment binary.
+
+        Tries in order:
+        1. ZS Bearer token (Authorization header) — for ZS-hosted file attachments
+        2. Browser-session CDN JWT as ``jwt`` cookie — for ZS CloudFront inline images
+        3. Jira Basic auth (email + API token) — for Jira-hosted attachments
+        """
+        jwt_val = self.headers.get("Authorization", "")
+        if jwt_val.lower().startswith("bearer "):
+            jwt_val = jwt_val[7:]
+
+        attempts: list = [
+            # (headers, cookies, auth)
+            (self.headers, None, None),
+        ]
+        if cdn_cookie:
+            attempts.append(({}, {"jwt": cdn_cookie}, None))
+        else:
+            # Fallback: try the API JWT as the CDN cookie (fails for inline images
+            # but harmless to attempt)
+            attempts.append(({}, {"jwt": jwt_val}, None))
+
+        if jira_email and jira_api_token:
+            attempts.append(({}, None, (jira_email, jira_api_token)))
+
+        for hdrs, cookies, auth in attempts:
+            try:
+                resp = requests.get(
+                    url,
+                    headers=hdrs or {},
+                    cookies=cookies,
+                    auth=auth,
+                    timeout=(30.0, 120.0),
+                    allow_redirects=True,
+                )
+                if resp.status_code == 200 and resp.content:
+                    return resp.content
+            except Exception:
+                pass
+        return None
+
+    # ------------------------------------------------------------------
+    # Custom fields
+    # ------------------------------------------------------------------
+
+    def get_custom_fields(self, project_key: str) -> list:
+        try:
+            all_fields = []
+            for page in self._get_paginated(
+                "customfields", {"projectKey": project_key}
+            ):
+                all_fields.extend(page)
+            return all_fields
+        except APIError:
+            return []

@@ -1,0 +1,40 @@
+{
+    "qase": {
+        "api_token": "<QASE_API_TOKEN>",
+        "host": "qase.io",
+        "ssl": true,
+        "scim_token": "<QASE_SCIM_TOKEN_OPTIONAL>",
+        "scim_host": "qase.io",
+        "request_max_retries": 5,
+        "request_retry_backoff_sec": 2
+    },
+    "users": {
+        "migrate": true,
+        "default": 1,
+        "create": false,
+        "inactive": false
+    },
+    "groups": {
+        "create": false,
+        "name": "Zephyr Scale Migration"
+    },
+    "zephyr_scale": {
+        "api": {
+            "token": "<ZEPHYR_SCALE_API_TOKEN>",
+            "host": "https://api.zephyrscale.smartbear.com/v2"
+        }
+    },
+    "projects": {
+        "import": [],
+        "status": "all",
+        "mapping": {
+            "ZEPHYR_KEY": "QASE_PROJECT_CODE"
+        }
+    },
+    "runs": {
+        "created_after": 0
+    },
+    "migration": {
+        "preserve_ids": true
+    }
+}
