@@ -1,0 +1,32 @@
+src/entities/zephyr_scale/fields.py
+  s_3bb454b5e756ca::t_066c869aa4b677 43-44
+  s_3bb454b5e756ca::t_6ebfa27d876d27 31-42,45-47,49,53-65
+  s_3bb454b5e756ca::t_50f83fbd37d9a2 48
+  s_3bb454b5e756ca::t_e77922233ccab7 180
+  s_3bb454b5e756ca::t_f8483c9d89d9bf 183-184,190,192,201,203-218,222-224,236,242,252
+  s_3bb454b5e756ca::t_7e5c55dec63b48 259
+  s_3bb454b5e756ca::t_79ec5e13a7fec4 50-52
+  s_3bb454b5e756ca::t_6ccc850f4b7fb1 114-124,128-130,135-137,143-175,179,198,220-221,225-227,239,257-258
+src/entities/zephyr_scale/cases.py
+  s_3bb454b5e756ca::t_38b73da27ba3c1 363-380
+src/service/qase.py
+  s_3bb454b5e756ca::t_711f887755caa9 169-179
+  s_3bb454b5e756ca::t_0e6a886ef0081a 33
+  s_3bb454b5e756ca::t_bddf5d7c708550 180
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.4",
+  "base_commit_sha": "aeef6b51cd20a0c334e014c0a1441214f7209562",
+  "prompts": {},
+  "sessions": {
+    "s_3bb454b5e756ca": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "91fcf4cf-69f1-4ee5-bb18-d89b4120369a",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "rmontemor-qase <rmontemor@qase.io>"
+    }
+  }
+}
