@@ -30,6 +30,7 @@ from qaseio.models import (
     MilestoneCreate,
     CustomFieldCreate,
     CustomFieldCreateValueInner,
+    CustomFieldUpdate,
     ProjectCreate,
     RunCreate,
     ResultcreateBulk,
@@ -155,7 +156,6 @@ class QaseService:
     def create_custom_field(self, data) -> int:
         try:
             api_instance = CustomFieldsApi(self.client)
-            # Create a custom field.
             api_response = api_instance.create_custom_field(custom_field_create=CustomFieldCreate(**data))
             if not api_response.status:
                 self.logger.log('Error creating custom field: ' + data['title'])
@@ -165,6 +165,18 @@ class QaseService:
         except ApiException as e:
             self.logger.log('Exception when calling CustomFieldsApi->create_custom_field: %s\n' % e)
         return 0
+
+    def update_custom_field(self, cf_id: int, data: dict) -> bool:
+        try:
+            api_instance = CustomFieldsApi(self.client)
+            api_response = api_instance.update_custom_field(
+                id=cf_id,
+                custom_field_update=CustomFieldUpdate(**data),
+            )
+            return bool(api_response.status)
+        except ApiException as e:
+            self.logger.log('Exception when calling CustomFieldsApi->update_custom_field: %s\n' % e)
+        return False
 
     def create_configuration_group(self, project_code, title):
         try:

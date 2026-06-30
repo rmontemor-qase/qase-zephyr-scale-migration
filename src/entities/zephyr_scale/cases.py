@@ -360,10 +360,24 @@ class Cases:
         cf_map = self.mappings.custom_fields or {}
         if custom_fields and cf_map:
             qase_cf = {}
-            for zs_cf_id, value in custom_fields.items():
-                qase_cf_id = cf_map.get(str(zs_cf_id))
-                if qase_cf_id is not None and value is not None:
-                    qase_cf[str(qase_cf_id)] = str(value) if not isinstance(value, list) else ",".join(str(v) for v in value)
+            for cf_name, value in custom_fields.items():
+                qase_cf_id = cf_map.get(cf_name)
+                if qase_cf_id is None or value is None:
+                    continue
+                if isinstance(value, bool):
+                    serialised = "true" if value else "false"
+                elif isinstance(value, list):
+                    if not value:
+                        continue
+                    serialised = ",".join(str(v) for v in value)
+                elif isinstance(value, str):
+                    # Strip ISO time suffix from date values ("2026-06-30T00:00:00Z" → "2026-06-30")
+                    serialised = value.split("T")[0] if "T" in value and value.endswith("Z") else value
+                    if not serialised:
+                        continue
+                else:
+                    serialised = str(value)
+                qase_cf[str(qase_cf_id)] = serialised
             if qase_cf:
                 data["custom_field"] = qase_cf
 

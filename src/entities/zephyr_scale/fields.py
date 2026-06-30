@@ -28,6 +28,41 @@ _CF_TYPE_MAP = {
 }
 
 
+def _infer_cf_type(name: str, sample_value) -> int:
+    """Infer Qase custom field type from a field name and a sample value."""
+    if isinstance(sample_value, bool):
+        return 4  # checkbox
+    if isinstance(sample_value, list):
+        return 6  # multi-select
+    if isinstance(sample_value, (int, float)):
+        return 0  # number
+    name_lower = (name or "").lower()
+    if isinstance(sample_value, str):
+        if "user" in name_lower:
+            return 8
+        if "date" in name_lower:
+            return 9
+        if "url" in name_lower:
+            return 7
+        return 1  # single-line text
+    # null — use name hints only (user before date to avoid "user picker" matching "picker")
+    if "user" in name_lower:
+        return 8
+    if "date" in name_lower:
+        return 9
+    if "url" in name_lower:
+        return 7
+    if "checkbox" in name_lower:
+        return 4
+    if "number" in name_lower or "integer" in name_lower or "float" in name_lower:
+        return 0
+    if "multi" in name_lower or "list" in name_lower:
+        return 6
+    if "paragraph" in name_lower or "multi line" in name_lower or "multiline" in name_lower:
+        return 2
+    return 1  # default: string
+
+
 class Fields:
     """Register Qase system field option ids and mirror Zephyr Scale custom fields to Qase."""
 
@@ -76,56 +111,120 @@ class Fields:
         return self.mappings
 
     async def _sync_custom_fields(self):
-        """Create (or reuse) a Qase custom field for each ZS custom field."""
+        """Create (or reuse) a Qase custom field for each ZS custom field.
+
+        ZS Cloud API v2 exposes field definitions at GET /customfields, but that
+        endpoint is unavailable on some tenants (returns 404). When it fails we
+        fall back to scanning the first page of test cases for each project and
+        inferring field types from the values we observe.
+
+        The mapping key is always the field NAME (string), because the
+        ``customFields`` object on a test case response uses names as keys, not
+        numeric IDs.
+        """
         if not self.mappings.projects:
             return
 
-        # Collect ZS custom field definitions across all projects (dedup by id)
-        zs_fields_by_id: dict = {}
+        # --- Phase 1: try the /customfields endpoint ---
+        # name → full ZS field definition dict
+        zs_fields_by_name: dict = {}
         for proj in self.mappings.projects:
             zephyr_key = proj.get("zephyr_key", "")
             try:
                 for cf in self.zephyr.get_custom_fields(zephyr_key):
-                    cf_id = cf.get("id")
-                    if cf_id is not None:
-                        zs_fields_by_id[cf_id] = cf
+                    name = (cf.get("name") or "").strip()
+                    if name:
+                        zs_fields_by_name[name] = cf
             except Exception as e:
                 self.logger.log(
                     f"[Fields] Failed to fetch ZS custom fields for {zephyr_key}: {e}", "warning"
                 )
 
-        if not zs_fields_by_id:
+        # --- Phase 2: fallback — discover fields from test case payloads ---
+        if not zs_fields_by_name:
+            self.logger.log(
+                "[Fields] /customfields unavailable; discovering custom fields from test cases"
+            )
+            cf_samples: dict = {}  # name → first non-null value seen (or None)
+            for proj in self.mappings.projects:
+                zephyr_key = proj.get("zephyr_key", "")
+                try:
+                    gen = self.zephyr.get_test_cases(zephyr_key)
+                    try:
+                        first_page = next(gen)
+                    except StopIteration:
+                        first_page = []
+                    for tc in first_page:
+                        for cf_name, cf_val in (tc.get("customFields") or {}).items():
+                            if cf_name not in cf_samples or (
+                                cf_samples[cf_name] is None and cf_val is not None
+                            ):
+                                cf_samples[cf_name] = cf_val
+                except Exception as e:
+                    self.logger.log(
+                        f"[Fields] Failed to scan TCs for {zephyr_key} CF discovery: {e}", "warning"
+                    )
+
+            for cf_name, sample_val in cf_samples.items():
+                zs_fields_by_name[cf_name] = {
+                    "name": cf_name,
+                    "_inferred": True,
+                    "_inferred_type": _infer_cf_type(cf_name, sample_val),
+                }
+
+        if not zs_fields_by_name:
             self.logger.log("[Fields] No Zephyr Scale custom fields found")
             return
 
-        self.logger.log(f"[Fields] Found {len(zs_fields_by_id)} Zephyr Scale custom field(s)")
+        self.logger.log(f"[Fields] Found {len(zs_fields_by_name)} Zephyr Scale custom field(s)")
+        self.mappings.stats.add_custom_field("zephyr-scale", len(zs_fields_by_name))
 
         # Load existing Qase custom fields to avoid duplicates (match by title)
-        existing_qase_cfs: dict = {}  # title.lower() → id
+        # Store: title.lower() → (id, is_enabled_for_all_projects)
+        existing_qase_cfs: dict = {}
         try:
             qase_cfs = await self.pools.qs(self.qase.get_case_custom_fields)
             for cf in (qase_cfs or []):
                 t = (getattr(cf, "title", None) or "").strip().lower()
                 cid = getattr(cf, "id", None)
+                enabled = bool(getattr(cf, "is_enabled_for_all_projects", False))
                 if t and cid is not None:
-                    existing_qase_cfs[t] = int(cid)
+                    existing_qase_cfs[t] = (int(cid), enabled)
         except Exception as e:
             self.logger.log(
                 f"[Fields] Failed to fetch existing Qase custom fields: {e}", "warning"
             )
 
-        for zs_id, zs_cf in zs_fields_by_id.items():
-            name = (zs_cf.get("name") or "").strip()
-            if not name:
-                continue
-
+        for name, zs_cf in zs_fields_by_name.items():
             name_lower = name.lower()
             if name_lower in existing_qase_cfs:
-                qase_cf_id = existing_qase_cfs[name_lower]
+                qase_cf_id, already_global = existing_qase_cfs[name_lower]
                 self.logger.log(f"[Fields] Reusing existing Qase CF '{name}' (id={qase_cf_id})")
+                # Ensure the CF is accessible in all projects so case creation doesn't fail
+                if not already_global:
+                    ok = await self.pools.qs(
+                        self.qase.update_custom_field,
+                        qase_cf_id,
+                        {"is_enabled_for_all_projects": True},
+                    )
+                    if ok:
+                        self.logger.log(
+                            f"[Fields] Enabled Qase CF '{name}' for all projects"
+                        )
+                    else:
+                        self.logger.log(
+                            f"[Fields] Could not enable Qase CF '{name}' for all projects",
+                            "warning",
+                        )
             else:
-                zs_type_name = (zs_cf.get("type") or {}).get("name", "plain_text").lower()
-                qase_type = _CF_TYPE_MAP.get(zs_type_name, 2)
+                if zs_cf.get("_inferred"):
+                    qase_type = zs_cf["_inferred_type"]
+                    # For inferred multiselect we don't know options → fall back to text
+                    if qase_type == 6:
+                        qase_type = 1
+                else:
+                    zs_type_name = (zs_cf.get("type") or {}).get("name", "plain_text").lower()
+                    qase_type = _CF_TYPE_MAP.get(zs_type_name, 2)
 
                 cf_data = {
                     "title": name,
@@ -134,12 +233,13 @@ class Fields:
                     "is_required": False,
                     "is_visible": True,
                     "is_filterable": True,
+                    "is_enabled_for_all_projects": True,
                 }
 
-                # For select/multiselect, carry over option names
+                # Carry over option names for select/multiselect from /customfields data
                 options = zs_cf.get("options") or []
                 if options and qase_type in (3, 6):
-                    cf_data["options"] = [
+                    cf_data["value"] = [
                         {"title": str(opt.get("name") or opt), "default": False}
                         for opt in options if opt
                     ]
@@ -149,11 +249,13 @@ class Fields:
                     self.logger.log(
                         f"[Fields] Created Qase CF '{name}' (id={qase_cf_id}, type={qase_type})"
                     )
-                    existing_qase_cfs[name_lower] = qase_cf_id
+                    existing_qase_cfs[name_lower] = (qase_cf_id, True)
                 else:
                     self.logger.log(f"[Fields] Failed to create Qase CF '{name}'", "warning")
                     continue
 
-            self.mappings.custom_fields[str(zs_id)] = qase_cf_id
+            # Map by field NAME — the TC customFields dict uses names as keys
+            self.mappings.custom_fields[name] = qase_cf_id
+            self.mappings.stats.add_custom_field("qase", 1)
 
         self.logger.log(f"[Fields] Custom field mapping: {self.mappings.custom_fields}")
