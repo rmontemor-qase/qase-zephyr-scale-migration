@@ -214,18 +214,48 @@ class ZephyrScaleApiClient:
             return None
 
     def get_test_case_attachments(self, tc_key: str) -> list:
-        """Return attachment metadata for a test case (empty list if none or 404)."""
+        """Return normalised attachment list for a test case.
+
+        The ZS API returns ``{"attachments": [{"id": 123, "name": "file.png"}]}``.
+        We normalise each item to ``{"filename": name, "url": <download_url>}``
+        so callers can treat file and execution attachments uniformly.
+        Download URL: GET /testcases/{key}/attachments/{id} (Bearer token, no CDN).
+        """
         data = self._get_optional(f"testcases/{tc_key}/attachments")
-        if data is None:
+        if not data:
             return []
-        return data.get("values") or []
+        raw = data.get("attachments") or data.get("values") or []
+        result = []
+        for a in raw:
+            att_id = a.get("id")
+            name = a.get("name") or a.get("filename") or "attachment"
+            url = a.get("url") or (
+                f"{self.base_url}/testcases/{tc_key}/attachments/{att_id}" if att_id else None
+            )
+            if url:
+                result.append({"filename": name, "url": url})
+        return result
 
     def get_test_execution_attachments(self, ex_id) -> list:
-        """Return attachment metadata for a test execution (empty list if none or 404)."""
+        """Return normalised attachment list for a test execution.
+
+        Same normalisation as get_test_case_attachments.
+        Download URL: GET /testexecutions/{id}/attachments/{att_id} (Bearer token).
+        """
         data = self._get_optional(f"testexecutions/{ex_id}/attachments")
-        if data is None:
+        if not data:
             return []
-        return data.get("values") or []
+        raw = data.get("attachments") or data.get("values") or []
+        result = []
+        for a in raw:
+            att_id = a.get("id")
+            name = a.get("name") or a.get("filename") or "attachment"
+            url = a.get("url") or (
+                f"{self.base_url}/testexecutions/{ex_id}/attachments/{att_id}" if att_id else None
+            )
+            if url:
+                result.append({"filename": name, "url": url})
+        return result
 
     def download_attachment_bytes(
         self,

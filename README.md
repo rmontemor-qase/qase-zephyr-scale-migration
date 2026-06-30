@@ -29,7 +29,7 @@ Python script that migrates test data from **Zephyr Scale Cloud** into **Qase**.
 | **Labels** | Case **tags** (up to 10) |
 | **Custom fields** | Qase custom fields (when mapped) |
 | **Step-by-step** test script (`inline.description`, `inline.expectedResult`, `inline.testData`) | Case **steps** |
-| **File attachments** (from the Attachments tab) | Case **attachments** — downloaded via ZS API and re-uploaded to Qase |
+| **File attachments** (from the Attachments tab) | Case **attachments** — downloaded via ZS REST API and re-uploaded to Qase |
 
 ### Test cycles → runs
 
@@ -48,17 +48,19 @@ Python script that migrates test data from **Zephyr Scale Cloud** into **Qase**.
 | Execution **status** (Pass/Fail/Blocked/Skip/WIP/Unexecuted) | Result **status** |
 | Execution **comment** | Result **comment** |
 | Execution **date** | Result **timestamp** |
-| **File attachments** on execution | Result **attachments** |
+| **File attachments** on execution | Result **attachments** — downloaded via ZS REST API and re-uploaded to Qase |
 
 ---
 
 ## Limitations
 
-### Inline images are not migrated
+### Inline images in rich-text fields are not migrated
 
-ZS Cloud stores images embedded in rich-text fields (objective, precondition, description) on SmartBear's own CloudFront CDN (`cloudfront.tm4j.smartbear.com`). Downloading them requires a Forge JWT that is only issued by the ZS JavaScript app running inside an authenticated browser session — it cannot be obtained through any REST API.
+ZS Cloud stores images embedded in rich-text fields (objective, precondition, description) on SmartBear's own CloudFront CDN (`cloudfront.tm4j.smartbear.com`). Downloading from that CDN requires a **Forge JWT** that is only issued by the ZS JavaScript app running inside an authenticated browser session — it cannot be obtained through any REST API.
 
-**Effect:** Inline images are replaced with a text note in the form `[Image: filename.png]` so the migrated case preserves a record of what images existed. File attachments (uploaded via the Attachments tab) are fully migrated.
+Inline images are replaced with a text note in the form `[Image: filename.png]` so the migrated case preserves a record of what images existed.
+
+**File attachments** (uploaded via the Attachments tab) are a separate concern and are fully migrated. ZS serves them directly through the REST API (`GET /testcases/{key}/attachments/{id}`) using the same Bearer token, with no CDN involvement.
 
 ### Zephyr Scale Cloud only
 
