@@ -1,0 +1,22 @@
+src/entities/zephyr_scale/cases.py
+  s_3bb454b5e756ca::t_35ef739fd68cf1 353-361,365
+  s_3bb454b5e756ca::t_9e480a8b386de7 366
+src/entities/zephyr_scale/runs.py
+  s_3bb454b5e756ca::t_86c2bb01ed8d00 307-310,317
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.8",
+  "base_commit_sha": "f9c6cca694a8d85045f80cdb1088d70bccdb4b7c",
+  "prompts": {},
+  "sessions": {
+    "s_3bb454b5e756ca": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "91fcf4cf-69f1-4ee5-bb18-d89b4120369a",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "rmontemor-qase <rmontemor@qase.io>"
+    }
+  }
+}
