@@ -1,0 +1,30 @@
+src/api/zephyr_scale.py
+  s_3bb454b5e756ca::t_8870922139c56a 166-169
+src/importer.py
+  s_3bb454b5e756ca::t_5d77beb74d24d9 10
+  s_3bb454b5e756ca::t_7312f37b92681e 99-108
+src/entities/zephyr_scale/runs.py
+  s_3bb454b5e756ca::t_379769a13d9a40 307-314
+src/entities/zephyr_scale/milestones.py
+  s_3bb454b5e756ca::t_74bbaa611d257f 1-104
+src/service/zephyr_scale.py
+  s_3bb454b5e756ca::t_5c84df36730c7f 69-72
+src/entities/zephyr_scale/__init__.py
+  s_3bb454b5e756ca::t_341119a904392f 7,16
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.8",
+  "base_commit_sha": "1f70a2399683d753994b730e36e47dff2d849b2e",
+  "prompts": {},
+  "sessions": {
+    "s_3bb454b5e756ca": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "91fcf4cf-69f1-4ee5-bb18-d89b4120369a",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "rmontemor-qase <rmontemor@qase.io>"
+    }
+  }
+}
