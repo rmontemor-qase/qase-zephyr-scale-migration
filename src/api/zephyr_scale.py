@@ -163,6 +163,10 @@ class ZephyrScaleApiClient:
         """Fetch a single test cycle."""
         return self._get(f"testcycles/{cycle_key}")
 
+    def get_test_plans(self, project_key: str):
+        """Yield pages of test plans for *project_key*."""
+        yield from self._get_paginated("testplans", {"projectKey": project_key})
+
     # ------------------------------------------------------------------
     # Test executions
     # ------------------------------------------------------------------

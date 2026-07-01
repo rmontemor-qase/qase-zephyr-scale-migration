@@ -7,6 +7,7 @@ from .entities.zephyr_scale import (
     Suites,
     Cases,
     Runs,
+    Milestones,
 )
 from .service import QaseService, QaseScimService, ZephyrScaleService
 from .support import ConfigManager, Logger, Mappings, ThrottledThreadPoolExecutor, Pools
@@ -94,6 +95,16 @@ class Importer:
             self.config,
             self.pools,
         ).import_suites(project)
+
+        # Milestones (test plans)
+        self.mappings = Milestones(
+            self.qase_service,
+            self.source_service,
+            self.logger,
+            self.mappings,
+            self.config,
+            self.pools,
+        ).import_milestones(project)
 
         # Test cases
         Cases(

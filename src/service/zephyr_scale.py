@@ -66,6 +66,10 @@ class ZephyrScaleService:
     def get_test_cycle(self, cycle_key: str) -> dict:
         return self.client.get_test_cycle(cycle_key)
 
+    def get_test_plans(self, project_key: str):
+        """Yield pages of test plans."""
+        yield from self.client.get_test_plans(project_key)
+
     # ------------------------------------------------------------------
     # Test executions
     # ------------------------------------------------------------------

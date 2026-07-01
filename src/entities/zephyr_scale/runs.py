@@ -304,9 +304,14 @@ class Runs:
             comment = (ex.get("comment") or "").strip()
             executed_on = self._parse_ts(ex.get("executedOn") or ex.get("createdOn"))
 
-            # executionTime / estimatedTime are in milliseconds; Qase wants seconds
-            raw_duration = ex.get("executionTime") or ex.get("estimatedTime")
-            elapsed = max(0, int(raw_duration / 1000)) if raw_duration else 0
+            # Prefer actualStartDate/actualEndDate date math; fall back to executionTime/estimatedTime (ms)
+            start_ts = self._parse_ts(ex.get("actualStartDate"))
+            end_ts = self._parse_ts(ex.get("actualEndDate"))
+            if start_ts and end_ts and end_ts > start_ts:
+                elapsed = end_ts - start_ts
+            else:
+                raw_duration = ex.get("executionTime") or ex.get("estimatedTime")
+                elapsed = max(0, int(raw_duration / 1000)) if raw_duration else 0
 
             result = {
                 "test_id": tc_lookup,
