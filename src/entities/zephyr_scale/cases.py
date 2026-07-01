@@ -365,7 +365,9 @@ class Cases:
                 if qase_cf_id is None or value is None:
                     continue
                 if isinstance(value, bool):
-                    serialised = "true" if value else "false"
+                    if not value:
+                        continue  # False (unchecked) is Qase's default; Qase silently drops "false" anyway
+                    serialised = "true"
                 elif isinstance(value, list):
                     if not value:
                         continue
