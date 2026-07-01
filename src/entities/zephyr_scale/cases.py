@@ -350,10 +350,19 @@ class Cases:
         if att_hashes:
             data["attachments"] = att_hashes
 
-        # Tags from labels
-        labels = tc.get("labels") or []
+        # Tags: labels + component (when set)
+        labels = list(tc.get("labels") or [])
+        component = (tc.get("component") or {})
+        if isinstance(component, dict):
+            component_name = (component.get("name") or "").strip()
+        else:
+            component_name = str(component).strip()
+        if component_name:
+            labels.append(component_name)
         if labels:
             data["tags"] = [str(lbl) for lbl in labels if lbl][:10]
+
+        data["is_flaky"] = 0
 
         # Custom fields
         custom_fields = tc.get("customFields") or {}

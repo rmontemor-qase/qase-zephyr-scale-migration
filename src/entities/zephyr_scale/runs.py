@@ -304,13 +304,17 @@ class Runs:
             comment = (ex.get("comment") or "").strip()
             executed_on = self._parse_ts(ex.get("executedOn") or ex.get("createdOn"))
 
+            # executionTime / estimatedTime are in milliseconds; Qase wants seconds
+            raw_duration = ex.get("executionTime") or ex.get("estimatedTime")
+            elapsed = max(0, int(raw_duration / 1000)) if raw_duration else 0
+
             result = {
                 "test_id": tc_lookup,
                 "_qase_case_id": qase_case_id,
                 "status_id": qase_status,
                 "comment": comment,
                 "created_on": executed_on or _now_ts(),
-                "elapsed": 0,
+                "elapsed": elapsed,
                 "created_by": self.mappings.default_user,
             }
 
