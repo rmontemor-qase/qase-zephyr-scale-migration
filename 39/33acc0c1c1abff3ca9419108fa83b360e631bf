@@ -1,0 +1,19 @@
+src/entities/zephyr_scale/cases.py
+  s_3bb454b5e756ca::t_8925c3d90640b8 368-370
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.5",
+  "base_commit_sha": "3933acc0c1c1abff3ca9419108fa83b360e631bf",
+  "prompts": {},
+  "sessions": {
+    "s_3bb454b5e756ca": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "91fcf4cf-69f1-4ee5-bb18-d89b4120369a",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "rmontemor-qase <rmontemor@qase.io>"
+    }
+  }
+}
